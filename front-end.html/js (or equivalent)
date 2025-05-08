@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat Assistant</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        #chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #messages {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        .message {
+            margin: 8px 0;
+        }
+        .user {
+            text-align: right;
+            color: blue;
+        }
+        .bot {
+            text-align: left;
+            color: green;
+        }
+        #input-area {
+            display: flex;
+            gap: 10px;
+        }
+        #user-input {
+            flex: 1;
+            padding: 8px;
+            font-size: 1em;
+        }
+        #send-btn, #upload-btn {
+            padding: 8px 12px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        #model-select {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Chat Assistant</h1>
+    <div id="model-select">
+        <label for="model">Select Model:</label>
+        <select id="model">
+            <option value="lite_llm">LiteLLM</option>
+            <!-- Add other models if available -->
+        </select>
+    </div>
+    <div id="chat-container">
+        <div id="messages"></div>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="Type your message..." />
+            <button id="send-btn">Send</button>
+            <input type="file" id="upload-input" style="display:none" />
+            <button id="upload-btn">Upload Media</button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Initialize variables and event listeners
+         */
+        const messagesDiv = document.getElementById('messages');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const uploadBtn = document.getElementById('upload-btn');
+        const uploadInput = document.getElementById('upload-input');
+        const modelSelect = document.getElementById('model');
+
+        let conversationHistory = [];
+        const apiUrl = '/api/chat'; // Adjust if backend endpoint differs
+
+        /**
+         * Append message to chat window
+         * @param {string} text - Message text
+         * @param {string} sender - 'user' or 'bot'
+         */
+        function appendMessage(text, sender) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message ' + sender;
+            msgDiv.textContent = text;
+            messagesDiv.appendChild(msgDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        /**
+         * Send user message to backend and handle response
+         */
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+            appendMessage(message, 'user');
+            conversationHistory.push({ role: 'user', content: message });
+            userInput.value = '';
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        history: conversationHistory,
+                        model: modelSelect.value
+                    })
+                });
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json();
+                const reply = data.reply || '';
+                appendMessage(reply, 'bot');
+                conversationHistory.push({ role: 'assistant', content: reply });
+            } catch (error) {
+                console.error(error);
+                appendMessage('Error: ' + error.message, 'bot');
+            }
+        }
+
+        /**
+         * Handle media upload
+         */
+        async function uploadMedia() {
+            uploadInput.click();
+        }
+
+        /**
+         * Process uploaded media and send to backend
+         * @param {Event} event
+         */
+        async function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('history', JSON.stringify(conversationHistory));
+            formData.append('model', modelSelect.value);
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    throw new Error(`Upload error: ${response.status} ${response.statusText}`);
+                }
+                const data = await response.json();
+                const reply = data.reply || '';
+                appendMessage(reply, 'bot');
+                conversationHistory.push({ role: 'assistant', content: reply });
+            } catch (error) {
+                console.error(error);
+                appendMessage('Upload Error: ' + error.message, 'bot');
+            }
+            // Reset file input
+            uploadInput.value = '';
+        }
+
+        /**
+         * Event listeners
+         */
+        sendBtn.addEventListener('click', sendMessage);
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        uploadBtn.addEventListener('click', uploadMedia);
+        uploadInput.addEventListener('change', handleFileUpload);
+    </script>
+</body>
+</html>
